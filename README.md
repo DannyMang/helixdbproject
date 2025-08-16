@@ -16,33 +16,18 @@ conda activate pr-bot
 pip install -r requirements.txt
 ```
 
-Or use the setup script:
-```bash
-./setup.sh
-```
-
 ### 2. Start the Webhook Server
 ```bash
 # Simple way
 python run_webhook.py
-
-# Or directly
-python scripts/start_webhook.py
 ```
 
 ### 3. Start with ngrok (for GitHub integration)
 ```bash
 # Simple way
 python run_with_ngrok.py
-
-# Or directly
-python scripts/start_with_ngrok.py
 ```
 
-### 4. Test the Webhook (Optional)
-```bash
-python tests/test_webhook.py
-```
 
 ### 4. Configure GitHub Webhook
 
