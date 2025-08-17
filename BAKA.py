@@ -5,11 +5,3 @@ def not_so_good_code():
 
 not_so_good_code()
 
-
-def not_so_good_code_2():
-    for i in range(10):
-        print(i)
-
-not_so_good_code_2()
-
-
