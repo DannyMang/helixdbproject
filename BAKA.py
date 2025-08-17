@@ -3,5 +3,3 @@ def not_so_good_code():
         print(i)
     }
 
-not_so_good_code()
-
