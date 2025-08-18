@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Load variables from .env if present
 
-app = FastAPI(title="PR Review Bot Webhook", version="1.0.0")
+app = FastAPI(title="PR Review Bot", version="1.1.0")
 
 # Configuration
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
@@ -22,9 +22,16 @@ CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "")
 CEREBRAS_MODEL = os.getenv("CEREBRAS_MODEL", "gpt-oss-120b")
 CEREBRAS_MAX_TOKENS = int(os.getenv("CEREBRAS_MAX_TOKENS", "2048"))
 
-def verify_github_signature(payload_body: bytes, signature: str) -> bool:
+async def get_github_client(installation_id: int):
+    """Get an authenticated GitHub API client for an installation"""
+    from github import Github
+    
+    token = await get_installation_access_token(installation_id)
+    return Github(token)
+
+def verify_github_signature(payload_body: bytes, signature: str, secret: str) -> bool:
     """Verify the GitHub webhook signature"""
-    if not GITHUB_WEBHOOK_SECRET:
+    if not secret:
         print("WARNING: No webhook secret set, skipping verification")
         return True
     
@@ -32,20 +39,20 @@ def verify_github_signature(payload_body: bytes, signature: str) -> bool:
         return False
     
     expected_signature = 'sha256=' + hmac.new(
-        GITHUB_WEBHOOK_SECRET.encode('utf-8'),
+        secret.encode('utf-8'),
         payload_body,
         hashlib.sha256
     ).hexdigest()
     
     return hmac.compare_digest(expected_signature, signature)
 
-@app.post("/webhook")
+@app.post("/webhook", tags=["Legacy Webhook"])
 async def github_webhook_handler(
     request: Request,
     x_hub_signature_256: Optional[str] = Header(None, alias="X-Hub-Signature-256"),
     x_github_event: Optional[str] = Header(None, alias="X-GitHub-Event")
 ):
-    """Handle GitHub webhook events"""
+    """Handle GitHub webhook events (for user/repo webhooks)"""
     
     # Get the raw payload
     payload_body = await request.body()
@@ -71,10 +78,76 @@ async def github_webhook_handler(
     else:
         print(f"Received unhandled event: {x_github_event}")
     
-    return {"message": "Webhook received"}
+    return {"message": "Legacy webhook received"}
+
+@app.post("/app-webhook", tags=["GitHub App"])
+async def github_app_webhook_handler(
+    request: Request,
+    x_hub_signature_256: Optional[str] = Header(None, alias="X-Hub-Signature-256"),
+    x_github_event: Optional[str] = Header(None, alias="X-GitHub-Event")
+):
+    """Handle GitHub App webhook events"""
+    
+    payload_body = await request.body()
+    
+    # Verify signature
+    if GITHUB_APP_WEBHOOK_SECRET and not verify_github_signature(payload_body, x_hub_signature_256 or "", GITHUB_APP_WEBHOOK_SECRET):
+        raise HTTPException(status_code=403, detail="Invalid signature for App webhook")
+
+    try:
+        payload = json.loads(payload_body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    print(f"Received App event: {x_github_event}")
+
+    if x_github_event == "pull_request":
+        action = payload.get("action", "")
+        if action in ["opened", "synchronize", "reopened"]:
+            await handle_pr_event(payload)
+        else:
+            print(f"Ignored PR action: {action}")
+            
+    elif x_github_event == "installation":
+        await handle_installation_event(payload)
+
+    elif x_github_event == "ping":
+        print("Received ping event from GitHub App")
+        return {"message": "Pong! App webhook is working"}
+
+    else:
+        print(f"Received unhandled App event: {x_github_event}")
+
+    return {"message": "App webhook received"}
+async def handle_installation_event(payload):
+    """Handle installation events for the GitHub App"""
+    action = payload.get("action")
+    installation = payload.get("installation", {})
+    repos = payload.get("repositories", [])
+    requester = payload.get("requester", {})
+    
+    print(f"App installation event:")
+    print(f"  Action: {action}")
+    print(f"  Installation ID: {installation.get('id')}")
+    print(f"  App ID: {installation.get('app_id')}")
+    print(f"  Target: {installation.get('target_type')} ({installation.get('target_id')})")
+    print(f"  Account: {installation.get('account', {}).get('login')}")
+    if requester:
+        print(f"  Requested by: {requester.get('login')}")
+    
+    if action == "created":
+        print(f"  ✅ App installed on {len(repos)} repositories:")
+        for repo in repos:
+            print(f"    - {repo['full_name']}")
+    elif action == "deleted":
+        print(f"  🗑️ App uninstalled")
+    elif action == "suspend":
+        print(f"  ⏸️ App suspended")
+    elif action == "unsuspend":
+        print(f"  ▶️ App unsuspended")
 
 async def handle_pr_event(payload):
-    """Handle PR opened/updated events"""
+    """Handle PR opened/updated events from webhooks or the App"""
     pr = payload["pull_request"]
     repo = payload["repository"]
     action = payload["action"]
@@ -121,12 +194,12 @@ async def handle_pr_event(payload):
         print("   ⚠️ Could not post PR comment (missing GITHUB_TOKEN or API error). Review output:")
         print(review_text)
 
-@app.get("/")
+@app.get("/", tags=["Health"])
 async def health_check():
     """Simple health check endpoint"""
-    return {"status": "healthy", "message": "PR Review Bot Webhook is running"}
+    return {"status": "healthy", "message": "PR Review Bot is running"}
 
-@app.get("/status")
+@app.get("/status", tags=["Health"])
 async def status():
     """Status endpoint with more details"""
     return {
@@ -135,7 +208,8 @@ async def status():
         "model_provider": "cerebras",
         "model": CEREBRAS_MODEL,
         "endpoints": {
-            "webhook": "/webhook",
+            "legacy_webhook": "/webhook",
+            "app_webhook": "/app-webhook",
             "health": "/",
             "status": "/status"
         }
