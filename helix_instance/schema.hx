@@ -1,5 +1,14 @@
-N::Root {
-    name: String,
+// User represents a GitHub account/organization that owns repositories
+N::User {
+    username: String,
+    created_at: Date DEFAULT NOW
+}
+
+// Repository (formerly Root) represents a single GitHub repository
+N::Repository {
+    owner: String,         // GitHub username of the owner
+    name: String,          // Repository name
+    full_name: String,     // Combined as "owner/name"
     extracted_at: Date DEFAULT NOW
 }
 
@@ -24,15 +33,26 @@ N::Entity {
     extracted_at: Date DEFAULT NOW
 }
 
-E::Root_to_Folder {
-    From: Root,
+// Link between User and Repository
+E::User_to_Repository {
+    From: User,
+    To: Repository,
+    Properties: {
+        access_type: String DEFAULT "owner"
+    }
+}
+
+// Updated from Root_to_Folder
+E::Repository_to_Folder {
+    From: Repository,
     To: Folder,
     Properties: {
     }
 }
 
-E::Root_to_File {
-    From: Root,
+// Updated from Root_to_File
+E::Repository_to_File {
+    From: Repository,
     To: File,
     Properties: {
     }
@@ -66,13 +86,13 @@ E::Entity_to_Entity {
     }
 }
 
-E::Entity_to_EmbededCode {
+E::Entity_to_EmbeddedCode {
     From: Entity,
-    To: EmbededCode,
+    To: EmbeddedCode,
     Properties: {
     }
 }
 
-V::EmbededCode {
+V::EmbeddedCode {
     vector: [F64]
 }
