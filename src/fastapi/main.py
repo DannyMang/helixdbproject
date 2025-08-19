@@ -3,10 +3,10 @@ import json
 import hmac
 import hashlib
 from fastapi import FastAPI, Request, HTTPException, Header
-from pydantic import BaseModel
-from typing import Optional, List, Tuple
+from typing import Optional, List
 import requests
 from dotenv import load_dotenv
+from github import get_installation_access_token
 
 load_dotenv()  # Load variables from .env if present
 
@@ -14,7 +14,6 @@ app = FastAPI(title="PR Review Bot", version="1.1.0")
 
 # Configuration
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
 
 # Cerebras configuration
@@ -26,7 +25,7 @@ async def get_github_client(installation_id: int):
     """Get an authenticated GitHub API client for an installation"""
     from github import Github
 
-    token = await get_installation_access_token(installation_id)
+    token = get_installation_access_token(installation_id)
     return Github(token)
 
 def verify_github_signature(payload_body: bytes, signature: str, secret: str) -> bool:
@@ -152,6 +151,21 @@ async def handle_pr_event(payload):
     repo = payload["repository"]
     action = payload["action"]
 
+    installation_id = payload.get("installation", {}).get("id")
+    if not installation_id:
+        print("   ⚠️ Could not find installation ID in payload. Cannot authenticate as App.")
+        # Fallback for legacy webhooks that might still use GITHUB_TOKEN
+        if not GITHUB_TOKEN:
+                return
+        app_token = GITHUB_TOKEN
+    else:
+        try:
+            # Generate a temporary token for this specific installation
+            app_token = get_installation_access_token(installation_id)
+        except Exception as e:
+            print(f"   ⚠️ Could not get installation access token: {e}")
+            return
+
     print(f"\n🔄 PR Event Received:")
     print(f"   Action: {action}")
     print(f"   Repository: {repo['full_name']}")
@@ -163,7 +177,7 @@ async def handle_pr_event(payload):
     # Fetch changed files and patches
     owner, repo_name = repo['full_name'].split('/')
     pr_number = pr['number']
-    files = fetch_pr_changed_files(owner, repo_name, pr_number)
+    files = fetch_pr_changed_files(owner, repo_name, pr_number, app_token)
 
     if not files:
         print("   No changed files found or GitHub API access not configured")
@@ -223,7 +237,7 @@ if __name__ == "__main__":
 
 # --------- Helper functions for PR analysis and LLM integration ---------
 
-def fetch_pr_changed_files(owner: str, repo_name: str, pr_number: int, max_files: int = 15) -> List[dict]:
+def fetch_pr_changed_files(owner: str, repo_name: str, pr_number: int, token: str, max_files: int = 15) -> List[dict]:
     """Fetch changed files for a PR including patches. Requires GITHUB_TOKEN.
 
     Returns a list of dicts with keys: filename, status, additions, deletions, changes, patch (optional)
@@ -233,7 +247,7 @@ def fetch_pr_changed_files(owner: str, repo_name: str, pr_number: int, max_files
 
     url = f"https://api.github.com/repos/{owner}/{repo_name}/pulls/{pr_number}/files"
     headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "pr-review-bot",
@@ -349,13 +363,13 @@ def call_cerebras_for_review(prompt: str) -> str:
         print(f"   ⚠️ Failed to call Cerebras: {exc}")
         return ""
 
-def post_pr_comment(owner: str, repo_name: str, pr_number: int, body: str) -> bool:
+def post_pr_comment(owner: str, repo_name: str, pr_number: int, body: str, token: str) -> bool:
     """Post a comment to the PR using the Issues comments endpoint. Requires GITHUB_TOKEN."""
     if not GITHUB_TOKEN:
         return False
     url = f"https://api.github.com/repos/{owner}/{repo_name}/issues/{pr_number}/comments"
     headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "pr-review-bot",
