@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Tuple
 import requests
 from dotenv import load_dotenv
+from github import get_installation_access_token
 
 load_dotenv()  # Load variables from .env if present
 
@@ -25,7 +26,7 @@ CEREBRAS_MAX_TOKENS = int(os.getenv("CEREBRAS_MAX_TOKENS", "2048"))
 async def get_github_client(installation_id: int):
     """Get an authenticated GitHub API client for an installation"""
     from github import Github
-    
+
     token = await get_installation_access_token(installation_id)
     return Github(token)
 
@@ -34,16 +35,16 @@ def verify_github_signature(payload_body: bytes, signature: str, secret: str) ->
     if not secret:
         print("WARNING: No webhook secret set, skipping verification")
         return True
-    
+
     if not signature or not signature.startswith('sha256='):
         return False
-    
+
     expected_signature = 'sha256=' + hmac.new(
         secret.encode('utf-8'),
         payload_body,
         hashlib.sha256
     ).hexdigest()
-    
+
     return hmac.compare_digest(expected_signature, signature)
 
 @app.post("/webhook", tags=["Legacy Webhook"])
@@ -53,31 +54,31 @@ async def github_webhook_handler(
     x_github_event: Optional[str] = Header(None, alias="X-GitHub-Event")
 ):
     """Handle GitHub webhook events (for user/repo webhooks)"""
-    
+
     # Get the raw payload
     payload_body = await request.body()
-    
+
     try:
         payload = json.loads(payload_body)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
-    
+
     # Handle PR events
     if x_github_event == "pull_request":
         action = payload.get("action", "")
-        
+
         if action in ["opened", "synchronize", "reopened"]:
             await handle_pr_event(payload)
         else:
             print(f"Ignored PR action: {action}")
-    
+
     elif x_github_event == "ping":
         print("Received ping event from GitHub")
         return {"message": "Pong! Webhook is working"}
-    
+
     else:
         print(f"Received unhandled event: {x_github_event}")
-    
+
     return {"message": "Legacy webhook received"}
 
 @app.post("/app-webhook", tags=["GitHub App"])
@@ -87,9 +88,9 @@ async def github_app_webhook_handler(
     x_github_event: Optional[str] = Header(None, alias="X-GitHub-Event")
 ):
     """Handle GitHub App webhook events"""
-    
+
     payload_body = await request.body()
-    
+
     # Verify signature
     if GITHUB_APP_WEBHOOK_SECRET and not verify_github_signature(payload_body, x_hub_signature_256 or "", GITHUB_APP_WEBHOOK_SECRET):
         raise HTTPException(status_code=403, detail="Invalid signature for App webhook")
@@ -107,7 +108,7 @@ async def github_app_webhook_handler(
             await handle_pr_event(payload)
         else:
             print(f"Ignored PR action: {action}")
-            
+
     elif x_github_event == "installation":
         await handle_installation_event(payload)
 
@@ -125,7 +126,7 @@ async def handle_installation_event(payload):
     installation = payload.get("installation", {})
     repos = payload.get("repositories", [])
     requester = payload.get("requester", {})
-    
+
     print(f"App installation event:")
     print(f"  Action: {action}")
     print(f"  Installation ID: {installation.get('id')}")
@@ -134,7 +135,7 @@ async def handle_installation_event(payload):
     print(f"  Account: {installation.get('account', {}).get('login')}")
     if requester:
         print(f"  Requested by: {requester.get('login')}")
-    
+
     if action == "created":
         print(f"  ✅ App installed on {len(repos)} repositories:")
         for repo in repos:
@@ -151,7 +152,7 @@ async def handle_pr_event(payload):
     pr = payload["pull_request"]
     repo = payload["repository"]
     action = payload["action"]
-    
+
     print(f"\n🔄 PR Event Received:")
     print(f"   Action: {action}")
     print(f"   Repository: {repo['full_name']}")
@@ -159,7 +160,7 @@ async def handle_pr_event(payload):
     print(f"   Title: {pr['title']}")
     print(f"   Author: {pr['user']['login']}")
     print(f"   Branch: {pr['head']['ref']} -> {pr['base']['ref']}")
-    
+
     # Fetch changed files and patches
     owner, repo_name = repo['full_name'].split('/')
     pr_number = pr['number']
@@ -223,17 +224,17 @@ if __name__ == "__main__":
 
 # --------- Helper functions for PR analysis and LLM integration ---------
 
-def fetch_pr_changed_files(owner: str, repo_name: str, pr_number: int, max_files: int = 15) -> List[dict]:
+def fetch_pr_changed_files(owner: str, repo_name: str, pr_number: int, token: str, max_files: int = 15) -> List[dict]:
     """Fetch changed files for a PR including patches. Requires GITHUB_TOKEN.
 
     Returns a list of dicts with keys: filename, status, additions, deletions, changes, patch (optional)
     """
-    if not GITHUB_TOKEN:
+    if not token:
         return []
 
     url = f"https://api.github.com/repos/{owner}/{repo_name}/pulls/{pr_number}/files"
     headers = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "pr-review-bot",
