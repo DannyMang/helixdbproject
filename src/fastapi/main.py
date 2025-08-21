@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request, HTTPException, Header
 from typing import Optional, List
 import requests
 from dotenv import load_dotenv
-from github import get_installation_access_token
+from github_client import get_installation_access_token
 
 load_dotenv()  # Load variables from .env if present
 
