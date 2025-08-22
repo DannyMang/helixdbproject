@@ -4,9 +4,7 @@ import jwt
 import requests
 import hashlib
 import hmac
-
-GITHUB_APP_ID = os.getenv("GITHUB_APP_ID")
-GITHUB_PRIVATE_KEY = os.getenv("GITHUB_PRIVATE_KEY")
+from utils.constants import GITHUB_APP_ID, GITHUB_PRIVATE_KEY
 
 def get_github_app_jwt():
     """Create a JWT for the GitHub App"""

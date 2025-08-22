@@ -17,6 +17,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    environment:
+      # Add your environment variables here
+      CEREBRAS_MODEL: ${CEREBRAS_MODEL}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
+      # Add any other environment variables your app needs
+    volumes:
+      - ./.env:/app/.env
 
   caddy:
     container_name: caddy
