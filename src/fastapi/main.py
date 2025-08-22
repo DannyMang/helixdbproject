@@ -213,6 +213,11 @@ async def health_check():
     """Simple health check endpoint"""
     return {"status": "healthy", "message": "PR Review Bot is running"}
 
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """Simple health check endpoint"""
+    return {"status": "healthy", "message": "ryan is baka"}
+
 @app.get("/status", tags=["Health"])
 async def status():
     """Status endpoint with more details"""
@@ -362,6 +367,9 @@ def call_cerebras_for_review(prompt: str) -> str:
     except Exception as exc:
         print(f"   ⚠️ Failed to call Cerebras: {exc}")
         return ""
+    
+    
+
 
 def post_pr_comment(owner: str, repo_name: str, pr_number: int, body: str, token: str) -> bool:
     """Post a comment to the PR using the Issues comments endpoint. Requires GITHUB_TOKEN."""
