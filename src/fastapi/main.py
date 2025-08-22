@@ -208,15 +208,10 @@ async def handle_pr_event(payload):
         print("   ⚠️ Could not post PR comment (missing GITHUB_TOKEN or API error). Review output:")
         print(review_text)
 
-@app.get("/", tags=["Health"])
-async def health_check():
-    """Simple health check endpoint"""
-    return {"status": "healthy", "message": "PR Review Bot is running"}
-
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Simple health check endpoint"""
-    return {"status": "healthy", "message": "ryan is baka"}
+    return {"status": "healthy", "message": "PR Review Bot is running"}
 
 @app.get("/status", tags=["Health"])
 async def status():
