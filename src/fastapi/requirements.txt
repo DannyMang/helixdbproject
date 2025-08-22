@@ -9,3 +9,4 @@ PyJWT==2.8.0
 PyGithub==1.59
 pyngrok==7.0.0
 helix-py
+letta-client

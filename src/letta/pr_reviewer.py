@@ -4,7 +4,7 @@ from typing import List
 from dotenv import load_dotenv
 from letta_client import Letta
 import requests
-from fastapi.github_client import get_installation_access_token
+from ..github_client import get_installation_access_token
 from utils.constants import CEREBRAS_API_KEY, CEREBRAS_MODEL, CEREBRAS_MAX_TOKENS
 
 load_dotenv()
