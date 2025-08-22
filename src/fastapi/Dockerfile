@@ -21,7 +21,6 @@ COPY fastapi/requirements.txt .
 RUN pip install --user --no-cache-dir --upgrade -r requirements.txt
 
 # Copy the app and required modules
-COPY fastapi/.env .
 COPY fastapi/*.py ./
 COPY utils/*.py ./utils/
 COPY letta/*.py ./letta/
