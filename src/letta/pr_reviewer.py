@@ -44,7 +44,7 @@ async def handle_pull_request_event(payload: dict):
     else:
         print(f"Ignored PR action: {action}")
 
-async def handle_issue_comment_event(payload: dict):
+async def handle_pr_comment_event(payload: dict):
     """Handles 'issue_comment' events."""
     action = payload.get("action", "")
     comment_body = payload.get("comment", {}).get("body", "")
@@ -333,7 +333,7 @@ async def handle_installation_event(payload):
 
 EVENT_HANDLERS = {
     "pull_request": handle_pull_request_event,
-    "issue_comment": handle_issue_comment_event,
+    "pull_request_review_comment": handle_pr_comment_event,
     "push": handle_push_event,
     "installation": handle_installation_event,
 }
