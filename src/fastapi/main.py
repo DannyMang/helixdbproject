@@ -2,7 +2,6 @@ import os
 import json
 from fastapi import FastAPI, Request, HTTPException, Header
 from typing import Optional
-import requests
 from dotenv import load_dotenv
 from github_client import verify_github_signature
 from utils.constants import CEREBRAS_MODEL, GITHUB_WEBHOOK_SECRET
@@ -34,7 +33,7 @@ async def github_app_webhook_handler(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
-    print(f"Received App event: {x_github_event}")
+    print(f"Received App event: {x_github_event}, action: {payload.get('action', 'unknown')}")
 
     if x_github_event == "ping":
         print("Received ping event from GitHub App")
@@ -46,9 +45,10 @@ async def github_app_webhook_handler(
 
     handler = EVENT_HANDLERS.get(x_github_event, "")
     if handler:
+        print(f"Calling handler for event: {x_github_event}")
         await handler(payload)
     else:
-        print(f"Received unhandled App event: {x_github_event}")
+        print(f"Received unhandled App event: {x_github_event} (no handler registered)")
     return {"message": "App webhook received"}
 
 

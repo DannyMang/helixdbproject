@@ -51,12 +51,43 @@ async def handle_pr_comment_event(payload: dict):
 
     if action == "created" and "@toph" in comment_body.lower(): # Case-insensitive check
         print("Handling mention in issue comment.")
-        # Add your logic here. For example, you could re-run a review.
-        # issue = payload.get("issue", {})
-        # owner = payload.get("repository", {}).get("owner", {}).get("login")
-        # repo_name = payload.get("repository", {}).get("name")
-        # if "pull_request" in issue:
-        #     await handle_pr_event(payload) # Example: re-trigger review
+        issue = payload.get("issue", {})
+        owner = payload.get("repository", {}).get("owner", {}).get("login")
+        repo_name = payload.get("repository", {}).get("name")
+        if "pull_request" in issue:
+            print(f"Re-triggering review for PR comment with @toph mention")
+            # Fetch PR data before handling the event
+            try:
+                pr_url = issue.get("pull_request", {}).get("url")
+                if pr_url:
+                    installation_id = payload.get("installation", {}).get("id")
+                    app_token = get_installation_access_token(installation_id)
+
+                    headers = {
+                        "Authorization": f"Bearer {app_token}",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                        "User-Agent": "pr-review-bot",
+                    }
+                    response = requests.get(pr_url, headers=headers, timeout=30)
+                    if response.status_code == 200:
+                        pr_data = response.json()
+                        # Create a payload structure similar to a pull_request event
+                        pr_payload = {
+                            "action": "commented",
+                            "pull_request": pr_data,
+                            "repository": payload.get("repository"),
+                            "installation": payload.get("installation")
+                        }
+                        await handle_pr_event(pr_payload)
+                    else:
+                        print(f"Failed to fetch PR data: {response.status_code}")
+                else:
+                    print(f"No pull_request URL found in issue payload")
+            except Exception as e:
+                print(f"Error handling PR comment: {e}")
+        else:
+            print(f"@toph mentioned in a regular issue (not a PR)")
     else:
         print(f"Ignored issue_comment action: {action}")
 
@@ -72,9 +103,17 @@ async def handle_push_event(payload: dict):
 
 async def handle_pr_event(payload):
     """Handle PR opened/updated events from webhooks or the App"""
-    pr = payload["pull_request"]
-    repo = payload["repository"]
-    action = payload["action"]
+    pr = payload.get("pull_request")
+    if not pr:
+        print(f"   ⚠️ Missing pull_request data in payload")
+        return
+
+    repo = payload.get("repository")
+    if not repo:
+        print(f"   ⚠️ Missing repository data in payload")
+        return
+
+    action = payload.get("action", "unknown")
 
     installation_id = payload.get("installation", {}).get("id")
     try:
@@ -334,6 +373,7 @@ async def handle_installation_event(payload):
 EVENT_HANDLERS = {
     "pull_request": handle_pull_request_event,
     "pull_request_review_comment": handle_pr_comment_event,
+    "issue_comment": handle_pr_comment_event,
     "push": handle_push_event,
     "installation": handle_installation_event,
 }
