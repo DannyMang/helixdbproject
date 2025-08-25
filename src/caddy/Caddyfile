@@ -3,3 +3,8 @@
 		header_down Strict-Transport-Security max-age=31536000;
 	}
 }
+{$LETTA_DOMAIN} {
+    reverse_proxy {$LETTA_BACKEND}:8283 {
+        header_down Strict-Transport-Security max-age=31536000;
+    }
+}

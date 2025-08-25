@@ -40,7 +40,15 @@ async def handle_pull_request_event(payload: dict):
     action = payload.get("action", "")
     if action in ["opened", "synchronize", "reopened"]:
         print(f"Handling pull_request.{action} event.")
-        await handle_pr_event(payload) # Your existing detailed handler
+        repo = payload.get("repository", {})
+        pr_title = payload.get("pull_request", {}).get("title")
+        pr_author = payload.get("pull_request", {}).get("user", {}).get("login")
+        head_branch = payload.get("pull_request", {}).get("head", {}).get("ref")
+        base_branch = payload.get("pull_request", {}).get("base", {}).get("ref")
+        changed_files = payload.get("pull_request", {}).get("changed_files")
+
+        prompt = build_pr_comment_prompt(repo, pr_title, pr_author, head_branch, base_branch, changed_files)
+        await handle_pr_event(payload, prompt) # Your existing detailed handler
     else:
         print(f"Ignored PR action: {action}")
 
@@ -48,14 +56,21 @@ async def handle_pr_comment_event(payload: dict):
     """Handles 'issue_comment' events."""
     action = payload.get("action", "")
     comment_body = payload.get("comment", {}).get("body", "")
+    commenter = payload.get("comment", {}).get("user", {}).get("login", "user")
 
-    if action == "created" and "@toph" in comment_body.lower(): # Case-insensitive check
-        print("Handling mention in issue comment.")
+    if action == "created" and "@toph-bot" in comment_body.lower(): # Case-insensitive check
+        print(f"Handling mention in issue comment from {commenter}.")
         issue = payload.get("issue", {})
         owner = payload.get("repository", {}).get("owner", {}).get("login")
         repo_name = payload.get("repository", {}).get("name")
+
+        # Extract the actual question/request by removing the @toph mention
+        user_query = comment_body.replace("@toph-bot", "").replace("@Toph", "").strip()
+        if not user_query:
+            user_query = "Please provide information about this PR."
+
         if "pull_request" in issue:
-            print(f"Re-triggering review for PR comment with @toph mention")
+            print(f"Processing conversation request from PR comment with @toph mention")
             # Fetch PR data before handling the event
             try:
                 pr_url = issue.get("pull_request", {}).get("url")
@@ -71,15 +86,24 @@ async def handle_pr_comment_event(payload: dict):
                     }
                     response = requests.get(pr_url, headers=headers, timeout=30)
                     if response.status_code == 200:
+                        repository = payload.get("repository", "")
+                        pr_title = payload.get("title", "")
+                        pr_author = payload.get("author", "")
+                        head_branch = payload.get("head", {}).get("ref")
+                        base_branch = payload.get("base", {}).get("ref")
+                        changed_files = payload.get("changed_files", [])
                         pr_data = response.json()
                         # Create a payload structure similar to a pull_request event
                         pr_payload = {
                             "action": "commented",
                             "pull_request": pr_data,
-                            "repository": payload.get("repository"),
-                            "installation": payload.get("installation")
+                            "repository": repository,
+                            "installation": payload.get("installation"),
+                            "user_query": user_query,
+                            "commenter": commenter
                         }
-                        await handle_pr_event(pr_payload)
+                        prompt = build_pr_comment_prompt(repository, pr_title, pr_author, head_branch, base_branch, changed_files)
+                        await handle_pr_event(pr_payload, prompt)
                     else:
                         print(f"Failed to fetch PR data: {response.status_code}")
                 else:
@@ -101,7 +125,7 @@ async def handle_push_event(payload: dict):
     else:
         print(f"Ignored push to ref: {ref}")
 
-async def handle_pr_event(payload):
+async def handle_pr_event(payload, prompt):
     """Handle PR opened/updated events from webhooks or the App"""
     pr = payload.get("pull_request")
     if not pr:
@@ -114,6 +138,8 @@ async def handle_pr_event(payload):
         return
 
     action = payload.get("action", "unknown")
+    user_query = payload.get("user_query", "")
+    commenter = payload.get("commenter", "")
 
     installation_id = payload.get("installation", {}).get("id")
     try:
@@ -130,6 +156,9 @@ async def handle_pr_event(payload):
     print(f"   Title: {pr['title']}")
     print(f"   Author: {pr['user']['login']}")
     print(f"   Branch: {pr['head']['ref']} -> {pr['base']['ref']}")
+    if user_query:
+        print(f"   User Query: {user_query}")
+        print(f"   Commenter: {commenter}")
 
     # Fetch changed files and patches
     owner, repo_name = repo['full_name'].split('/')
@@ -139,16 +168,6 @@ async def handle_pr_event(payload):
     if not files:
         print("   No changed files found or GitHub API access not configured")
         return
-
-    # Build prompt for the LLM
-    prompt = build_review_prompt(
-        repository_full_name=repo['full_name'],
-        pr_title=pr['title'],
-        pr_author=pr['user']['login'],
-        head_branch=pr['head']['ref'],
-        base_branch=pr['base']['ref'],
-        changed_files=files,
-    )
 
     # Call Cerebras to get review text
     review_text = call_cerebras_for_review(prompt)
@@ -271,7 +290,7 @@ def build_review_prompt(
     changed_files: List[dict],
     max_total_patch_chars: int = 30_000,
 ) -> str:
-    """Construct a detailed, educational, and actionable review prompt for the LLM."""
+    """Construct a context-rich prompt for the conversational assistant to answer questions about the PR."""
     header = (
         f"Repository: {repository_full_name}\n"
         f"PR Title: {pr_title}\n"
@@ -280,7 +299,7 @@ def build_review_prompt(
         f"Files changed: {len(changed_files)}\n\n"
     )
 
-    parts: List[str] = [header, "## Code Diff to Review\n"]
+    parts: List[str] = [header, "## Code Changes Context\n"]
     accumulated = 0
     for file_info in changed_files:
         filename = file_info.get("filename", "<unknown>")
@@ -293,7 +312,7 @@ def build_review_prompt(
         # Truncate the patch if it's too long to avoid exhausting the budget on one file
         remaining = max_total_patch_chars - accumulated
         if remaining <= 0:
-            parts.append("\n[Diff budget exhausted, subsequent files omitted.]\n")
+            parts.append("\n[Context budget exhausted, subsequent files omitted.]\n")
             break
 
         if len(file_header) > remaining:
@@ -309,13 +328,6 @@ def build_review_prompt(
 ## Review Task
 
 You are a senior software engineer performing a code review. Your tone should be helpful, respectful, and educational. You are reviewing a pull request from a junior engineer, so your main goal is to help them learn and improve.
-
-### Your Directives:
-1.  **Prioritize High-Impact Feedback:** Focus on logic errors, potential bugs, security vulnerabilities, performance issues, and architectural improvements.
-2.  **Explain the "Why":** For each point of feedback, briefly explain *why* it's important. Link your suggestions to principles like readability, maintainability, or security. This is crucial for learning.
-3.  **Provide Actionable Code Snippets:** When suggesting a change, provide a concise code example of how to implement it correctly.
-4.  **Ignore Trivial Nitpicks:** Do **not** comment on minor stylistic issues like whitespace, import order, or missing commas that a linter or code formatter would catch automatically.
-5.  **Acknowledge Good Work:** If you see something done well (e.g., good test coverage, a clever solution), mention it briefly. This encourages good habits.
 
 ### Required Output Format:
 Provide your review in Markdown. Adhere strictly to this structure:
@@ -339,6 +351,73 @@ Provide your review in Markdown. Adhere strictly to this structure:
 """
     parts.append(instructions)
     # --- END OF THE IMPROVED PROMPT INSTRUCTIONS ---
+
+    return "".join(parts)
+
+def build_pr_comment_prompt(
+    repository_full_name: str,
+    pr_title: str,
+    pr_author: str,
+    head_branch: str,
+    base_branch: str,
+    changed_files: List[dict],
+    max_total_patch_chars: int = 30_000,
+):
+    header = (
+        f"Repository: {repository_full_name}\n"
+        f"PR Title: {pr_title}\n"
+        f"Author: {pr_author}\n"
+        f"Branches: {head_branch} -> {base_branch}\n"
+        f"Files changed: {len(changed_files)}\n\n"
+    )
+
+    parts: List[str] = [header, "## Code Diff Context\n"]
+    accumulated = 0
+    for file_info in changed_files:
+        filename = file_info.get("filename", "<unknown>")
+        patch = file_info.get("patch", "")
+        if not patch:
+            continue # Skip files with no diff content (e.g., binary files)
+
+        file_header = f"### File: `{filename}`\n```diff\n{patch}\n```\n"
+
+        # Truncate the patch if it's too long to avoid exhausting the budget on one file
+        remaining = max_total_patch_chars - accumulated
+        if remaining <= 0:
+            parts.append("\n[Diff budget exhausted, subsequent files omitted.]\n")
+            break
+
+        if len(file_header) > remaining:
+            # A simplified truncation for the oversized patch
+            truncated_patch = patch[:remaining - 150] + "\n... (truncated)\n"
+            file_header = f"### File: `{filename}`\n```diff\n{truncated_patch}\n```\n"
+
+        parts.append(file_header)
+        accumulated += len(file_header)
+
+    # --- START OF THE CONVERSATIONAL BOT INSTRUCTIONS ---
+    instructions = """
+## Conversational Assistant Role
+
+You are a helpful assistant with knowledge of this pull request. Your purpose is to answer questions and provide information about the PR in a conversational, helpful manner. Use the PR context and code diffs above to inform your responses.
+
+### Guidelines:
+1. **Be conversational and friendly** in your responses while maintaining technical accuracy.
+2. **Refer to specific code** from the diffs when answering questions about implementation details.
+3. **Provide context-aware answers** based on the PR's content, purpose, and changes.
+4. **Explain technical concepts** clearly when they're relevant to understanding the PR.
+5. **If you don't know something** or if the information isn't in the provided context, acknowledge this honestly.
+6. **Answer questions about**:
+   - What the PR is trying to accomplish
+   - How specific code changes work
+   - The purpose of new functions or modifications
+   - Potential implications of the changes
+   - Technical concepts related to the code
+
+The user will ask you questions about this pull request, and your job is to provide helpful, informative responses using the context provided above.
+"""
+    parts.append(instructions)
+    # --- END OF THE CONVERSATIONAL BOT INSTRUCTIONS ---
 
     return "".join(parts)
 
