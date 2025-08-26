@@ -1,6 +1,6 @@
 // User Management
-QUERY createUser(username: String, display_name: String) =>
-    user <- AddN<User>({username: username, display_name: display_name})
+QUERY createUser(username: String) =>
+    user <- AddN<User>({username: username})
     RETURN user
 
 QUERY getUser(username: String) =>
