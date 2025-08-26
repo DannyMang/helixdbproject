@@ -6,6 +6,7 @@ from letta_client import Letta
 import requests
 from github_client import get_installation_access_token
 from utils.constants import CEREBRAS_API_KEY, CEREBRAS_MODEL, CEREBRAS_MAX_TOKENS
+from .prompts import build_review_prompt, build_pr_comment_prompt
 
 load_dotenv()
 LETTA_API_KEY = os.getenv("LETTA_API_KEY")
@@ -47,7 +48,8 @@ async def handle_pull_request_event(payload: dict):
         base_branch = payload.get("pull_request", {}).get("base", {}).get("ref")
         changed_files = payload.get("pull_request", {}).get("changed_files")
 
-        prompt = build_pr_comment_prompt(repo, pr_title, pr_author, head_branch, base_branch, changed_files)
+        # Use review prompt for full PR reviews (not comments)
+        prompt = build_review_prompt(repo.get("full_name", ""), pr_title, pr_author, head_branch, base_branch, [])
         await handle_pr_event(payload, prompt) # Your existing detailed handler
     else:
         print(f"Ignored PR action: {action}")
@@ -86,13 +88,13 @@ async def handle_pr_comment_event(payload: dict):
                     }
                     response = requests.get(pr_url, headers=headers, timeout=30)
                     if response.status_code == 200:
-                        repository = payload.get("repository", "")
-                        pr_title = payload.get("title", "")
-                        pr_author = payload.get("author", "")
-                        head_branch = payload.get("head", {}).get("ref")
-                        base_branch = payload.get("base", {}).get("ref")
-                        changed_files = payload.get("changed_files", [])
+                        repository = payload.get("repository", {})
                         pr_data = response.json()
+                        pr_title = pr_data.get("title", "")
+                        pr_author = pr_data.get("user", {}).get("login", "")
+                        head_branch = pr_data.get("head", {}).get("ref", "")
+                        base_branch = pr_data.get("base", {}).get("ref", "")
+                        
                         # Create a payload structure similar to a pull_request event
                         pr_payload = {
                             "action": "commented",
@@ -102,7 +104,17 @@ async def handle_pr_comment_event(payload: dict):
                             "user_query": user_query,
                             "commenter": commenter
                         }
-                        prompt = build_pr_comment_prompt(repository, pr_title, pr_author, head_branch, base_branch, changed_files)
+                        
+                        # Fetch changed files first
+                        owner = repository.get("owner", {}).get("login", "")
+                        repo_name = repository.get("name", "")
+                        pr_number = pr_data.get("number")
+                        installation_id = payload.get("installation", {}).get("id")
+                        app_token = get_installation_access_token(installation_id)
+                        changed_files = fetch_pr_changed_files(owner, repo_name, pr_number, app_token)
+                        
+                        repo_full_name = repository.get("full_name", "")
+                        prompt = build_pr_comment_prompt(repo_full_name, pr_title, pr_author, head_branch, base_branch, changed_files, user_query)
                         await handle_pr_event(pr_payload, prompt)
                     else:
                         print(f"Failed to fetch PR data: {response.status_code}")
@@ -281,145 +293,6 @@ def truncate_text(text: str, max_chars: int) -> str:
     return text[: max_chars - 20] + "\n[...truncated...]\n"
 
 
-def build_review_prompt(
-    repository_full_name: str,
-    pr_title: str,
-    pr_author: str,
-    head_branch: str,
-    base_branch: str,
-    changed_files: List[dict],
-    max_total_patch_chars: int = 30_000,
-) -> str:
-    """Construct a context-rich prompt for the conversational assistant to answer questions about the PR."""
-    header = (
-        f"Repository: {repository_full_name}\n"
-        f"PR Title: {pr_title}\n"
-        f"Author: {pr_author}\n"
-        f"Branches: {head_branch} -> {base_branch}\n"
-        f"Files changed: {len(changed_files)}\n\n"
-    )
-
-    parts: List[str] = [header, "## Code Changes Context\n"]
-    accumulated = 0
-    for file_info in changed_files:
-        filename = file_info.get("filename", "<unknown>")
-        patch = file_info.get("patch", "")
-        if not patch:
-            continue # Skip files with no diff content (e.g., binary files)
-
-        file_header = f"### File: `{filename}`\n```diff\n{patch}\n```\n"
-
-        # Truncate the patch if it's too long to avoid exhausting the budget on one file
-        remaining = max_total_patch_chars - accumulated
-        if remaining <= 0:
-            parts.append("\n[Context budget exhausted, subsequent files omitted.]\n")
-            break
-
-        if len(file_header) > remaining:
-            # A simplified truncation for the oversized patch
-            truncated_patch = patch[:remaining - 150] + "\n... (truncated)\n"
-            file_header = f"### File: `{filename}`\n```diff\n{truncated_patch}\n```\n"
-
-        parts.append(file_header)
-        accumulated += len(file_header)
-
-    # --- START OF THE IMPROVED PROMPT INSTRUCTIONS ---
-    instructions = """
-## Review Task
-
-You are a senior software engineer performing a code review. Your tone should be helpful, respectful, and educational. You are reviewing a pull request from a junior engineer, so your main goal is to help them learn and improve.
-
-### Required Output Format:
-Provide your review in Markdown. Adhere strictly to this structure:
-
-**### High-Level Summary**
-(Provide a brief, one-paragraph summary of the pull request and your overall impression.)
-
-**### Actionable Feedback**
-(List your main points here. If there are no major issues, state "No major issues found.")
-*   **File:** `path/to/file.py`
-    *   **Concern:** (Briefly describe the potential issue.)
-    *   **Suggestion:** (Provide a clear, corrected code snippet.)
-    *   **Reasoning:** (Explain why the suggestion is an improvement.)
-
-*   **File:** `path/to/another_file.js`
-    *   **Concern:** ...
-
-**### Positive Reinforcement**
-(Mention one or two things that were done well. If none, omit this section.)
-*   👍 I appreciate the clear variable naming in the `calculate_totals` function. It makes the logic easy to follow.
-"""
-    parts.append(instructions)
-    # --- END OF THE IMPROVED PROMPT INSTRUCTIONS ---
-
-    return "".join(parts)
-
-def build_pr_comment_prompt(
-    repository_full_name: str,
-    pr_title: str,
-    pr_author: str,
-    head_branch: str,
-    base_branch: str,
-    changed_files: List[dict],
-    max_total_patch_chars: int = 30_000,
-):
-    header = (
-        f"Repository: {repository_full_name}\n"
-        f"PR Title: {pr_title}\n"
-        f"Author: {pr_author}\n"
-        f"Branches: {head_branch} -> {base_branch}\n"
-        f"Files changed: {len(changed_files)}\n\n"
-    )
-
-    parts: List[str] = [header, "## Code Diff Context\n"]
-    accumulated = 0
-    for file_info in changed_files:
-        filename = file_info.get("filename", "<unknown>")
-        patch = file_info.get("patch", "")
-        if not patch:
-            continue # Skip files with no diff content (e.g., binary files)
-
-        file_header = f"### File: `{filename}`\n```diff\n{patch}\n```\n"
-
-        # Truncate the patch if it's too long to avoid exhausting the budget on one file
-        remaining = max_total_patch_chars - accumulated
-        if remaining <= 0:
-            parts.append("\n[Diff budget exhausted, subsequent files omitted.]\n")
-            break
-
-        if len(file_header) > remaining:
-            # A simplified truncation for the oversized patch
-            truncated_patch = patch[:remaining - 150] + "\n... (truncated)\n"
-            file_header = f"### File: `{filename}`\n```diff\n{truncated_patch}\n```\n"
-
-        parts.append(file_header)
-        accumulated += len(file_header)
-
-    # --- START OF THE CONVERSATIONAL BOT INSTRUCTIONS ---
-    instructions = """
-## Conversational Assistant Role
-
-You are a helpful assistant with knowledge of this pull request. Your purpose is to answer questions and provide information about the PR in a conversational, helpful manner. Use the PR context and code diffs above to inform your responses.
-
-### Guidelines:
-1. **Be conversational and friendly** in your responses while maintaining technical accuracy.
-2. **Refer to specific code** from the diffs when answering questions about implementation details.
-3. **Provide context-aware answers** based on the PR's content, purpose, and changes.
-4. **Explain technical concepts** clearly when they're relevant to understanding the PR.
-5. **If you don't know something** or if the information isn't in the provided context, acknowledge this honestly.
-6. **Answer questions about**:
-   - What the PR is trying to accomplish
-   - How specific code changes work
-   - The purpose of new functions or modifications
-   - Potential implications of the changes
-   - Technical concepts related to the code
-
-The user will ask you questions about this pull request, and your job is to provide helpful, informative responses using the context provided above.
-"""
-    parts.append(instructions)
-    # --- END OF THE CONVERSATIONAL BOT INSTRUCTIONS ---
-
-    return "".join(parts)
 
 
 async def handle_installation_event(payload):
