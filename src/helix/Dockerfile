@@ -20,6 +20,8 @@ RUN helix install
 
 COPY helix_config/ /app/helix_config/
 
-# RUN helix deploy --path /app/helix_config
+COPY startup.sh /startup.sh
+RUN chmod +x /startup.sh
 
-CMD ["helix", "deploy", "--path", "/app/helix_config"]
+# Stop any existing instances, then deploy
+CMD ["/startup.sh"]
