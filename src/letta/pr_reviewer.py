@@ -94,7 +94,7 @@ async def handle_pr_comment_event(payload: dict):
                         pr_author = pr_data.get("user", {}).get("login", "")
                         head_branch = pr_data.get("head", {}).get("ref", "")
                         base_branch = pr_data.get("base", {}).get("ref", "")
-                        
+
                         # Create a payload structure similar to a pull_request event
                         pr_payload = {
                             "action": "commented",
@@ -104,7 +104,7 @@ async def handle_pr_comment_event(payload: dict):
                             "user_query": user_query,
                             "commenter": commenter
                         }
-                        
+
                         # Fetch changed files first
                         owner = repository.get("owner", {}).get("login", "")
                         repo_name = repository.get("name", "")
@@ -112,7 +112,7 @@ async def handle_pr_comment_event(payload: dict):
                         installation_id = payload.get("installation", {}).get("id")
                         app_token = get_installation_access_token(installation_id)
                         changed_files = fetch_pr_changed_files(owner, repo_name, pr_number, app_token)
-                        
+
                         repo_full_name = repository.get("full_name", "")
                         prompt = build_pr_comment_prompt(repo_full_name, pr_title, pr_author, head_branch, base_branch, changed_files, user_query)
                         await handle_pr_event(pr_payload, prompt)
@@ -315,6 +315,7 @@ async def handle_installation_event(payload):
         print(f"  ✅ App installed on {len(repos)} repositories:")
         for repo in repos:
             print(f"    - {repo['full_name']}")
+
     elif action == "deleted":
         print(f"  🗑️ App uninstalled")
     elif action == "suspend":

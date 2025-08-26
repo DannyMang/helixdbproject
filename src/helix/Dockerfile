@@ -19,9 +19,10 @@ ENV PATH="/root/.local/bin:${PATH}"
 RUN helix install
 
 COPY helix_config/ /app/helix_config/
+COPY /*.py /app/
 
-COPY startup.sh /startup.sh
-RUN chmod +x /startup.sh
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
 # Stop any existing instances, then deploy
-CMD ["/startup.sh"]
+CMD ["/start.sh"]
