@@ -65,6 +65,15 @@ services:
     networks:
       - default
 
+  helix:
+    container_name: helix
+    restart: unless-stopped
+    build:
+      context: ./src/helix
+      dockerfile: ./Dockerfile
+    ports:
+      - 6969:6969
+
 volumes:
   caddy_data:
   caddy_config:

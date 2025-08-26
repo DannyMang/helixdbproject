@@ -451,7 +451,7 @@ async def handle_installation_event(payload):
 
 EVENT_HANDLERS = {
     "pull_request": handle_pull_request_event,
-    "pull_request_review_comment": handle_pr_comment_event,
+    # "pull_request_review_comment": handle_pr_comment_event,
     "issue_comment": handle_pr_comment_event,
     "push": handle_push_event,
     "installation": handle_installation_event,

@@ -12,13 +12,12 @@ QUERY getAllUsers() =>
     RETURN users
 
 // Repository Management
-QUERY createRepository(username: String, repo_name: String, full_name: String, description: String) =>
+QUERY createRepository(username: String, repo_name: String, full_name: String) =>
     user <- N<User>::WHERE(_::{username}::EQ(username))
     repo <- AddN<Repository>({
         owner: username,
         name: repo_name,
-        full_name: full_name,
-        description: description
+        full_name: full_name
     })
     AddE<User_to_Repository>()::From(user)::To(repo)
     RETURN repo
@@ -31,6 +30,7 @@ QUERY getUserRepositories(username: String) =>
     user <- N<User>::WHERE(_::{username}::EQ(username))
     repos <- user::Out<User_to_Repository>
     RETURN repos
+
 
 // Create Folders - scoped to repository
 QUERY createSuperFolder(owner: String, repo_name: String, folder_name: String) =>
