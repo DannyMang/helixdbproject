@@ -7,8 +7,8 @@ services:
     container_name: fastapi
     restart: unless-stopped
     build:
-      context: ./src/fastapi
-      dockerfile: ./Dockerfile
+      context: ./src
+      dockerfile: ./fastapi/Dockerfile
     ports:
       - 8000:8000
     healthcheck:
@@ -17,6 +17,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    environment:
+      # Add your environment variables here
+      CEREBRAS_MODEL: ${CEREBRAS_MODEL}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
+      # Add any other environment variables your app needs
+    volumes:
+      - ./.env:/app/.env
 
   caddy:
     container_name: caddy
@@ -38,7 +45,36 @@ services:
       DB_PROXY_PORT: 6969
       DOMAIN: ${DOMAIN}
       DB_DOMAIN: ${DB_DOMAIN}
+      LETTA_DOMAIN: ${LETTA_DOMAIN}
+      LETTA_BACKEND: letta
+      LETTA_PASSWORD: ${LETTA_SERVER_PASSWORD}
+      LETTA_PROXY_PORT: 8283
+
+  letta:
+    container_name: letta
+    restart: unless-stopped
+    image: letta/letta:latest
+    ports:
+      - 8283:8283
+    environment:
+      CEREBRAS_API_KEY: ${CEREBRAS_API_KEY}
+      SECURE: "true"
+      LETTA_SERVER_PASSWORD: ${LETTA_SERVER_PASSWORD}
+    volumes:
+      - letta_data:/var/lib/postgresql/data
+    networks:
+      - default
+
+  helix:
+    container_name: helix
+    restart: unless-stopped
+    build:
+      context: ./src/helix
+      dockerfile: ./Dockerfile
+    ports:
+      - 6969:6969
 
 volumes:
   caddy_data:
   caddy_config:
+  letta_data: {}

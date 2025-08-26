@@ -1,0 +1,10 @@
+[project]
+name = "helix-mcp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "helix-py>=0.2.25",
+    "mcp[cli]>=1.13.1",
+]

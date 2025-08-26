@@ -2,9 +2,9 @@ import os
 import time
 import jwt
 import requests
-
-GITHUB_APP_ID = os.getenv("GITHUB_APP_ID")
-GITHUB_PRIVATE_KEY = os.getenv("GITHUB_PRIVATE_KEY")
+import hashlib
+import hmac
+from utils.constants import GITHUB_APP_ID, GITHUB_PRIVATE_KEY
 
 def get_github_app_jwt():
     """Create a JWT for the GitHub App"""
@@ -16,7 +16,7 @@ def get_github_app_jwt():
         "exp": int(time.time()) + (10 * 60),  # 10 minutes
         "iss": GITHUB_APP_ID,
     }
-    
+
     return jwt.encode(
         payload,
         GITHUB_PRIVATE_KEY,
@@ -30,10 +30,34 @@ def get_installation_access_token(installation_id: int):
         "Authorization": f"Bearer {jwt_token}",
         "Accept": "application/vnd.github.v3+json",
     }
-    
+
     url = f"https://api.github.com/app/installations/{installation_id}/access_tokens"
     response = requests.post(url, headers=headers)
     response.raise_for_status()
-    
+
     data = response.json()
     return data["token"]
+
+async def get_github_client(installation_id: int):
+    """Get an authenticated GitHub API client for an installation"""
+    from github import Github
+
+    token = get_installation_access_token(installation_id)
+    return Github(token)
+
+def verify_github_signature(payload_body: bytes, signature: str, secret: str) -> bool:
+    """Verify the GitHub webhook signature"""
+    if not secret:
+        print("WARNING: No webhook secret set, skipping verification")
+        return True
+
+    if not signature or not signature.startswith('sha256='):
+        return False
+
+    expected_signature = 'sha256=' + hmac.new(
+        secret.encode('utf-8'),
+        payload_body,
+        hashlib.sha256
+    ).hexdigest()
+
+    return hmac.compare_digest(expected_signature, signature)
