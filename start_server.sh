@@ -6,3 +6,5 @@ helix update
 helix deploy --path /src/helix/helix_config
 
 docker compose up --build
+
+tail -f /dev/null
