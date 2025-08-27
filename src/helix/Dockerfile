@@ -1,4 +1,4 @@
-FROM python:3.9
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -17,6 +17,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 RUN curl -sSL "https://install.helix-db.com" | bash
 ENV PATH="/root/.local/bin:${PATH}"
 RUN helix install
+RUN pip install uv
 
 COPY helix_config/ /app/helix_config/
 COPY requirements.txt /app/
@@ -24,7 +25,7 @@ COPY *.py /app/
 
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
-RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
+RUN uv pip install --no-cache-dir --upgrade -r /app/requirements.txt
 
 # Stop any existing instances, then deploy
 CMD ["/start.sh"]
