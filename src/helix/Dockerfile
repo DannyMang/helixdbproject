@@ -19,10 +19,12 @@ ENV PATH="/root/.local/bin:${PATH}"
 RUN helix install
 
 COPY helix_config/ /app/helix_config/
-COPY /*.py /app/
+COPY requirements.txt /app/
+COPY *.py /app/
 
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
+RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
 
 # Stop any existing instances, then deploy
 CMD ["/start.sh"]

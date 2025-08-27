@@ -9,7 +9,9 @@ echo "Clearing old deployments..."
 helix stop --all || echo "No deployments to stop"
 
 echo "Deploying new configuration..."
-exec helix deploy --path /app/helix_config --port 6969
+helix deploy --path /app/helix_config --port 6969
 
 echo "Starting Helix MCP server"
-exec uv run /app/mcp_server.py
+fastmcp run mcp_server.py
+
+wait

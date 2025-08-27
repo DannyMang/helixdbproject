@@ -1,7 +1,5 @@
 # To build the entire stack run 'make run'
 
-version: "3.7"
-
 services:
   fastapi:
     container_name: fastapi
@@ -68,6 +66,9 @@ services:
   helix:
     container_name: helix
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     build:
       context: ./src/helix
       dockerfile: ./Dockerfile
