@@ -63,25 +63,6 @@ services:
     networks:
       - default
 
-  helix:
-    container_name: helix
-    restart: unless-stopped
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    build:
-      context: ./src/helix
-      dockerfile: ./Dockerfile
-    ports:
-      - 6969:6969
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6969/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    deploy:
-      replicas: 1 # Ensures only one instance
-
 volumes:
   caddy_data:
   caddy_config:
