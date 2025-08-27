@@ -41,7 +41,7 @@ services:
       PROXY_BACKEND: fastapi
       PROXY_PORT: 8000
       DB_PROXY_PORT: 6969
-      DOMAIN: ${DOMAIN}
+      DOMAIN: ${FASTAPI_DOMAIN}
       DB_DOMAIN: ${DB_DOMAIN}
       LETTA_DOMAIN: ${LETTA_DOMAIN}
       LETTA_BACKEND: letta

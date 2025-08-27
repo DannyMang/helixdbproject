@@ -69,4 +69,4 @@ def out_e_step(connection_id: str, edge_label: str) -> str:
     return response[0]
 
 if __name__ == "__main__":
-    mcp.run(transport="http", host="127.0.0.1", port=8001)
+    mcp.run(transport="http", host="127.0.0.1", port=8001,path="/mcp")

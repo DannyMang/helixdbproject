@@ -5,6 +5,7 @@ helix install
 helix update
 helix deploy --path ./src/helix/helix_config
 
+echo "Starting MCP server..."
 fastmcp run src/helix/mcp_server.py &
 
 sleep 3
