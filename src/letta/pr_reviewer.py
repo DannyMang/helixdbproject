@@ -1,12 +1,14 @@
 # A client for interacting
 import os
-from typing import List
+import re
+from typing import List, Optional, Tuple
 from dotenv import load_dotenv
 from letta_client import Letta
 import requests
 from github_client import get_installation_access_token
 from utils.constants import CEREBRAS_API_KEY, CEREBRAS_MODEL, CEREBRAS_MAX_TOKENS
 from .prompts import build_review_prompt, build_pr_comment_prompt
+from .memory_manager import MemoryManager
 
 load_dotenv()
 LETTA_API_KEY = os.getenv("LETTA_API_KEY")
@@ -14,6 +16,7 @@ AGENT_ID = "agent-0042f472-b5a4-452f-8be1-d69f0cb91d22"
 
 
 client = Letta(token=LETTA_API_KEY, project="Toph")
+memory_manager = MemoryManager(client)
 
 def get_letta_agent(user_id: str):
     agent = client.agents.retrieve(agent_id=AGENT_ID)
@@ -55,12 +58,78 @@ async def handle_pull_request_event(payload: dict):
         print(f"Ignored PR action: {action}")
 
 async def handle_pr_comment_event(payload: dict):
-    """Handles 'issue_comment' events."""
+    """Handles 'issue_comment' events with command-based memory system."""
     action = payload.get("action", "")
     comment_body = payload.get("comment", {}).get("body", "")
     commenter = payload.get("comment", {}).get("user", {}).get("login", "user")
-
-    if action == "created" and "@toph-bot" in comment_body.lower(): # Case-insensitive check
+    
+    if action == "created":
+        # Detect command in comment
+        command = memory_manager.detect_command(comment_body)
+        
+        if command == "init":
+            # Handle initialization command
+            response = await memory_manager.handle_init_command(payload)
+            owner = payload.get("repository", {}).get("owner", {}).get("login")
+            repo_name = payload.get("repository", {}).get("name")
+            
+            # Get installation token and post response
+            installation_id = payload.get("installation", {}).get("id")
+            app_token = get_installation_access_token(installation_id)
+            
+            # For init command, we need to get the issue/PR number from the payload
+            issue_number = payload.get("issue", {}).get("number")
+            if issue_number:
+                posted = post_pr_comment(owner, repo_name, issue_number, response, app_token)
+                if posted:
+                    print(f"   ✅ Posted initialization response")
+                else:
+                    print(f"   ⚠️ Failed to post initialization response")
+            return
+        
+        elif command == "configure":
+            # Handle configuration command
+            response = await memory_manager.handle_configure_command(payload)
+            owner = payload.get("repository", {}).get("owner", {}).get("login")
+            repo_name = payload.get("repository", {}).get("name")
+            
+            # Get installation token and post response
+            installation_id = payload.get("installation", {}).get("id")
+            app_token = get_installation_access_token(installation_id)
+            
+            issue_number = payload.get("issue", {}).get("number")
+            if issue_number:
+                posted = post_pr_comment(owner, repo_name, issue_number, response, app_token)
+                if posted:
+                    print(f"   ✅ Posted configuration response")
+                else:
+                    print(f"   ⚠️ Failed to post configuration response")
+            return
+        
+        elif command == "interact":
+            # Check if user needs initialization first
+            init_response = await memory_manager.handle_interaction_command(payload)
+            if init_response:
+                # User needs to initialize first
+                owner = payload.get("repository", {}).get("owner", {}).get("login")
+                repo_name = payload.get("repository", {}).get("name")
+                installation_id = payload.get("installation", {}).get("id")
+                app_token = get_installation_access_token(installation_id)
+                
+                issue_number = payload.get("issue", {}).get("number")
+                if issue_number:
+                    posted = post_pr_comment(owner, repo_name, issue_number, init_response, app_token)
+                    if posted:
+                        print(f"   ✅ Posted initialization prompt")
+                    else:
+                        print(f"   ⚠️ Failed to post initialization prompt")
+                return
+            
+            # Continue with normal PR interaction
+            print(f"Handling mention in issue comment from {commenter}.")
+    
+    # Legacy compatibility - only process if we haven't handled a command above
+    if action == "created" and "@toph-bot" in comment_body.lower():
         print(f"Handling mention in issue comment from {commenter}.")
         issue = payload.get("issue", {})
         owner = payload.get("repository", {}).get("owner", {}).get("login")
