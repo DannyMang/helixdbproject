@@ -1,10 +1,12 @@
-{$DOMAIN} {
+{$FASTAPI_DOMAIN} {
 	reverse_proxy {$PROXY_BACKEND}:{$PROXY_PORT} {
 		header_down Strict-Transport-Security max-age=31536000;
 	}
 }
-{$LETTA_DOMAIN} {
-    reverse_proxy {$LETTA_BACKEND}:8283 {
+
+{$HELIX_DOMAIN} {
+    rewrite * /mcp{uri}
+    reverse_proxy host.docker.internal:8001 {
         header_down Strict-Transport-Security max-age=31536000;
     }
 }

@@ -40,47 +40,30 @@ services:
     environment:
       PROXY_BACKEND: fastapi
       PROXY_PORT: 8000
-      DB_PROXY_PORT: 6969
-      DOMAIN: ${DOMAIN}
-      DB_DOMAIN: ${DB_DOMAIN}
+      DB_PROXY_PORT: 8001
+      FASTAPI_DOMAIN: ${FASTAPI_DOMAIN}
+      HELIX_DOMAIN: ${HELIX_DOMAIN}
       LETTA_DOMAIN: ${LETTA_DOMAIN}
       LETTA_BACKEND: letta
       LETTA_PASSWORD: ${LETTA_SERVER_PASSWORD}
       LETTA_PROXY_PORT: 8283
+    extra_hosts:
+      "host.docker.internal": "host-gateway"
 
-  letta:
-    container_name: letta
-    restart: unless-stopped
-    image: letta/letta:latest
-    ports:
-      - 8283:8283
-    environment:
-      CEREBRAS_API_KEY: ${CEREBRAS_API_KEY}
-      SECURE: "true"
-      LETTA_SERVER_PASSWORD: ${LETTA_SERVER_PASSWORD}
-    volumes:
-      - letta_data:/var/lib/postgresql/data
-    networks:
-      - default
-
-  helix:
-    container_name: helix
-    restart: unless-stopped
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    build:
-      context: ./src/helix
-      dockerfile: ./Dockerfile
-    ports:
-      - 6969:6969
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6969/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    deploy:
-      replicas: 1 # Ensures only one instance
+  # letta:
+  #     container_name: letta
+  #     restart: unless-stopped
+  #     image: letta/letta:latest
+  #     ports:
+  #         - 8283:8283
+  #     environment:
+  #         CEREBRAS_API_KEY: ${CEREBRAS_API_KEY}
+  #         SECURE: "true"
+  #         LETTA_SERVER_PASSWORD: ${LETTA_SERVER_PASSWORD}
+  #     volumes:
+  #         - letta_data:/var/lib/postgresql/data
+  #     networks:
+  #         - default
 
 volumes:
   caddy_data:
