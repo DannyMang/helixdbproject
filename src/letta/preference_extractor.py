@@ -350,6 +350,17 @@ class PreferenceExtractor:
             if marker in comment_body.lower():
                 return self._extract_code_block(comment_body, lang)
         
+        # Check for toph-bot init command and return everything after it
+        toph_patterns = ["@toph-bot/init", "@toph-bot/configure"]
+        for pattern in toph_patterns:
+            if pattern.lower() in comment_body.lower():
+                start_idx = comment_body.lower().find(pattern.lower()) + len(pattern)
+                content = comment_body[start_idx:].strip()
+                # Remove quotes if the content is wrapped in quotes
+                if content.startswith('"') and content.endswith('"'):
+                    content = content[1:-1]
+                return content
+        
         # If no code block, check for setup command and return everything after it
         setup_patterns = ["@bennyPRBot setup", "@bennyprbot setup"]
         for pattern in setup_patterns:
