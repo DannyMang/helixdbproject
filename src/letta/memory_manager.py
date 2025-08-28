@@ -229,8 +229,8 @@ Please run `@toph-bot/init` to set up your preferences, then I'll be able to hel
                 structured_preferences, user_id, repo_full_name
             )
             
-            # Update block value
-            updated_block = self.client.blocks.update(
+            # Update block value using modify (not update)
+            updated_block = self.client.blocks.modify(
                 block_id=block.id,
                 value=formatted_preferences
             )

@@ -15,7 +15,8 @@ LETTA_API_KEY = os.getenv("LETTA_API_KEY")
 AGENT_ID = "agent-0042f472-b5a4-452f-8be1-d69f0cb91d22"
 
 
-client = Letta(token=LETTA_API_KEY, project="Toph")
+# Use default project instead of "Toph" to avoid project not found error
+client = Letta(token=LETTA_API_KEY)
 memory_manager = MemoryManager(client)
 
 def get_letta_agent(user_id: str):
