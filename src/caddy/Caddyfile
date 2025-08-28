@@ -3,13 +3,10 @@
 		header_down Strict-Transport-Security max-age=31536000;
 	}
 }
-{$LETTA_DOMAIN} {
-    reverse_proxy {$LETTA_BACKEND}:8283 {
-        header_down Strict-Transport-Security max-age=31536000;
-    }
-}
+
 {$HELIX_DOMAIN} {
-    reverse_proxy {$PROXY_BACKEND}:8001 {
+    rewrite * /mcp{uri}
+    reverse_proxy host.docker.internal:8001 {
         header_down Strict-Transport-Security max-age=31536000;
     }
 }
