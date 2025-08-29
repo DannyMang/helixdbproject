@@ -1,11 +1,15 @@
-from src.letta.pr_reviewer import AGENT_ID
 """
 Memory Manager for bennyPRBot - Handles user preferences per codebase
 """
 
-from typing import Optional, List, Dict, Any
+import logging
+from typing import Optional, Dict, Any
 from letta_client import Letta
 from .preference_extractor import PreferenceExtractor, UserPreferences
+
+# Configure logger
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 class MemoryManager:
@@ -195,38 +199,55 @@ Please run `@toph-bot/init` to set up your preferences, then I'll be able to hel
         """Find existing preference block or create a default one"""
 
         preference_label = self._create_preference_label(user_id, repo_full_name)
+        logger.info(f"Looking for preference block with label: {preference_label}")
 
         try:
             # Try to find existing block
             existing_blocks = self.client.blocks.list(label=preference_label)
+            logger.info(f"Found {len(existing_blocks)} blocks with label {preference_label}")
             if existing_blocks:
+                logger.info(f"Returning existing block with ID: {getattr(existing_blocks[0], 'id', 'unknown_id')}")
                 return existing_blocks[0]
         except Exception as e:
-            print(f"Error searching for existing block: {e}")
+            logger.error(f"Error searching for existing block: {str(e)}", exc_info=True)
 
         # Create default block if none exists
+        logger.info(f"No existing block found, generating default preferences")
         default_preferences = self._generate_default_preferences(user_id, repo_full_name)
 
         try:
-            return self.client.blocks.create(
+            logger.info(f"Creating new block with label: {preference_label}")
+            new_block = self.client.blocks.create(
                 label=preference_label,
                 value=default_preferences,
                 description=f"User preferences for {user_id} in {repo_full_name}"
             )
+            logger.info(f"Successfully created new block with ID: {getattr(new_block, 'id', 'unknown_id')}")
+            return new_block
         except Exception as e:
-            print(f"Error creating preference block: {e}")
+            logger.error(f"Error creating preference block: {str(e)}", exc_info=True)
             return None
 
     async def update_preference_block(self, user_id: str, repo_full_name: str, new_preferences: str):
         """Update user preferences from uploaded content"""
 
+        logger.info(f"Starting update_preference_block for user '{user_id}' in repo '{repo_full_name}'")
+
+        logger.info(f"Attempting to find or create preference block")
         block = await self.find_or_create_preference_block(user_id, repo_full_name)
         if not block:
+            logger.error("Failed to find or create preference block")
             return None
+
+        logger.info(f"Found/created block: {getattr(block, 'id', 'unknown_id')}")
 
         # Parse and structure the preferences
         try:
+            logger.info(f"Parsing preference content")
             structured_preferences = self.parse_preference_content(new_preferences)
+            logger.info(f"Parsed preferences: {structured_preferences}")
+
+            logger.info(f"Formatting preferences for storage")
             formatted_preferences = self._format_preferences_for_storage(
                 structured_preferences, user_id, repo_full_name
             )
@@ -236,26 +257,41 @@ Please run `@toph-bot/init` to set up your preferences, then I'll be able to hel
             #     agent_id=,
             #     value=formatted_preferences
             # )
+            logger.info(f"Listing all blocks to find the right one to update")
             blocks = self.client.blocks.list()
+            logger.info(f"Found {len(blocks)} total blocks")
+
+            block_found = False
             for block in blocks:
                 block_name = block.name or ""
+                logger.info(f"Checking block: {block_name} (ID: {getattr(block, 'id', 'unknown')})")
+
                 if block_name.startswith(f"{user_id}_{repo_full_name}"):
                     block_id = block.id or ""
+                    logger.info(f"Found matching block with ID: {block_id}")
+                    block_found = True
+
+                    logger.info(f"Modifying existing block with ID: {block_id}")
                     updated_block = self.client.blocks.modify(
                         block_id=block_id,
                         value=formatted_preferences
                     )
+                    logger.info(f"Block successfully modified: {getattr(updated_block, 'id', 'unknown_id')}")
                     return updated_block
+
             # make new block if not found
-            new_block = self.client.blocks.create(
-                value=formatted_preferences,
-                name=f"{user_id}_{repo_full_name}_preferences",
-                label="pr_preferences"
-            )
-            return new_block
+            if not block_found:
+                logger.info(f"No matching block found, creating new block with name: {user_id}_{repo_full_name}_preferences")
+                new_block = self.client.blocks.create(
+                    value=formatted_preferences,
+                    name=f"{user_id}_{repo_full_name}_preferences",
+                    label="pr_preferences"
+                )
+                logger.info(f"New block created with ID: {getattr(new_block, 'id', 'unknown_id')}")
+                return new_block
 
         except Exception as e:
-            print(f"Error updating preference block: {e}")
+            logger.error(f"Error updating preference block: {str(e)}", exc_info=True)
             return None
 
     def parse_preference_content(self, content: str) -> UserPreferences:

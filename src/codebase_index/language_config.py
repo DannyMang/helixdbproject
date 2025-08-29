@@ -1,5 +1,4 @@
-from tree_sitter import Language, Parser
-from src.codebase_index.src.sample.simple_code.ingestion_copy import JS_LANGUAGE
+from tree_sitter import Language
 
 Language.build_library(
   # Store the library in the `build` directory
