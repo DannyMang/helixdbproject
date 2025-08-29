@@ -17,7 +17,7 @@ AGENT_ID = "agent-0042f472-b5a4-452f-8be1-d69f0cb91d22"
 
 # Use default project instead of "Toph" to avoid project not found error
 client = Letta(token=LETTA_API_KEY)
-memory_manager = MemoryManager(client)
+memory_manager = MemoryManager(client, AGENT_ID)
 
 def get_letta_agent(user_id: str):
     agent = client.agents.retrieve(agent_id=AGENT_ID)
@@ -63,21 +63,21 @@ async def handle_pr_comment_event(payload: dict):
     action = payload.get("action", "")
     comment_body = payload.get("comment", {}).get("body", "")
     commenter = payload.get("comment", {}).get("user", {}).get("login", "user")
-    
+
     if action == "created":
         # Detect command in comment
         command = memory_manager.detect_command(comment_body)
-        
+
         if command == "init":
             # Handle initialization command
             response = await memory_manager.handle_init_command(payload)
             owner = payload.get("repository", {}).get("owner", {}).get("login")
             repo_name = payload.get("repository", {}).get("name")
-            
+
             # Get installation token and post response
             installation_id = payload.get("installation", {}).get("id")
             app_token = get_installation_access_token(installation_id)
-            
+
             # For init command, we need to get the issue/PR number from the payload
             issue_number = payload.get("issue", {}).get("number")
             if issue_number:
@@ -87,17 +87,17 @@ async def handle_pr_comment_event(payload: dict):
                 else:
                     print(f"   ⚠️ Failed to post initialization response")
             return
-        
+
         elif command == "configure":
             # Handle configuration command
             response = await memory_manager.handle_configure_command(payload)
             owner = payload.get("repository", {}).get("owner", {}).get("login")
             repo_name = payload.get("repository", {}).get("name")
-            
+
             # Get installation token and post response
             installation_id = payload.get("installation", {}).get("id")
             app_token = get_installation_access_token(installation_id)
-            
+
             issue_number = payload.get("issue", {}).get("number")
             if issue_number:
                 posted = post_pr_comment(owner, repo_name, issue_number, response, app_token)
@@ -106,7 +106,7 @@ async def handle_pr_comment_event(payload: dict):
                 else:
                     print(f"   ⚠️ Failed to post configuration response")
             return
-        
+
         elif command == "interact":
             # Check if user needs initialization first
             init_response = await memory_manager.handle_interaction_command(payload)
@@ -116,7 +116,7 @@ async def handle_pr_comment_event(payload: dict):
                 repo_name = payload.get("repository", {}).get("name")
                 installation_id = payload.get("installation", {}).get("id")
                 app_token = get_installation_access_token(installation_id)
-                
+
                 issue_number = payload.get("issue", {}).get("number")
                 if issue_number:
                     posted = post_pr_comment(owner, repo_name, issue_number, init_response, app_token)
@@ -125,10 +125,10 @@ async def handle_pr_comment_event(payload: dict):
                     else:
                         print(f"   ⚠️ Failed to post initialization prompt")
                 return
-            
+
             # Continue with normal PR interaction
             print(f"Handling mention in issue comment from {commenter}.")
-    
+
     # Legacy compatibility - only process if we haven't handled a command above
     if action == "created" and "@toph-bot" in comment_body.lower():
         print(f"Handling mention in issue comment from {commenter}.")
