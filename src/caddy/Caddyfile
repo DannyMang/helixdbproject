@@ -5,8 +5,7 @@
 }
 
 {$HELIX_DOMAIN} {
-    rewrite * /mcp{uri}
-    reverse_proxy host.docker.internal:8001 {
+    reverse_proxy host.docker.internal:6969 {
         header_down Strict-Transport-Security max-age=31536000;
     }
 }

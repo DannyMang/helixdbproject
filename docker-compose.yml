@@ -40,7 +40,6 @@ services:
     environment:
       PROXY_BACKEND: fastapi
       PROXY_PORT: 8000
-      DB_PROXY_PORT: 8001
       FASTAPI_DOMAIN: ${FASTAPI_DOMAIN}
       HELIX_DOMAIN: ${HELIX_DOMAIN}
       LETTA_DOMAIN: ${LETTA_DOMAIN}
