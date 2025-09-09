@@ -1,5 +1,5 @@
 """
-Memory Manager for bennyPRBot - Handles user preferences per codebase
+Memory Manager for Toph Bot - Handles user preferences per codebase
 """
 
 import logging
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class MemoryManager:
-    """Manages user preference memory blocks for bennyPRBot"""
+    """Manages user preference memory blocks for Toph Bot"""
 
     def __init__(self, letta_client: Letta, agent_id: str):
         self.client = letta_client

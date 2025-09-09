@@ -1,20 +1,13 @@
-# A client for interacting
-import os
-import sys
-import re
-from typing import List, Optional, Tuple
+from typing import List
 from dotenv import load_dotenv
 from letta_client import Letta
 import requests
+from utils.constants import LETTA_API_KEY, AGENT_ID
 
 from github_client import get_installation_access_token
-from utils.constants import CEREBRAS_API_KEY, CEREBRAS_MODEL, CEREBRAS_MAX_TOKENS
 from .prompts import build_review_prompt, build_pr_comment_prompt
 from .memory_manager import MemoryManager
 
-load_dotenv()
-LETTA_API_KEY = os.getenv("LETTA_API_KEY")
-AGENT_ID = "agent-72b0ecc4-bd82-4776-880c-33a24b41f13e"
 
 
 # Use default project instead of "Toph" to avoid project not found error
@@ -125,21 +118,16 @@ async def handle_pr_event(payload, prompt):
         return
 
     # Call Cerebras to get review text
-    review_text = call_cerebras_for_review(prompt, owner)
+    review_text = call_letta_agent_for_review(prompt, owner)
 
     if not review_text:
         print("   LLM review skipped (missing credentials or request failed)")
         return
     return review_text
 
-def call_cerebras_for_review(prompt: str, user_id: str) -> str:
+def call_letta_agent_for_review(prompt: str, user_id: str) -> str:
     """Call Cerebras chat completions and return combined text."""
-    if not CEREBRAS_API_KEY:
-        return ""
-    try:
-        from cerebras.cloud.sdk import Cerebras
-    except Exception:
-        return ""
+    if not
 
     system_prompt = (
         "You are an expert software reviewer. Be precise, pragmatic, and actionable. "
