@@ -1,5 +1,11 @@
-{$DOMAIN} {
+{$FASTAPI_DOMAIN} {
 	reverse_proxy {$PROXY_BACKEND}:{$PROXY_PORT} {
 		header_down Strict-Transport-Security max-age=31536000;
 	}
+}
+
+{$HELIX_DOMAIN} {
+    reverse_proxy host.docker.internal:6969 {
+        header_down Strict-Transport-Security max-age=31536000;
+    }
 }
