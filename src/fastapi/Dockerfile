@@ -16,6 +16,7 @@ COPY fastapi/*.py ./
 COPY utils/*.py ./utils/
 COPY letta/*.py ./letta/
 COPY helix/mcp_server.py ./helix/
+COPY neon/*.py ./neon/
 
 # Create and switch to a non-root user for security
 RUN adduser --system --group nonroot

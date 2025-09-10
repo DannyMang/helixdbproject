@@ -9,3 +9,4 @@ PyGithub==1.59
 helix-py
 letta-client
 fastmcp
+psycopg2
