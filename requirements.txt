@@ -8,3 +8,4 @@ python-dotenv==1.0.1
 PyJWT==2.8.0
 PyGithub==1.59
 pyngrok==7.0.0
+psycopg2

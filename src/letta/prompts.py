@@ -5,6 +5,7 @@ REVIEW_INSTRUCTIONS = """
 ## Review Task
 
 You are a senior software engineer performing a code review. Your tone should be helpful, respectful, and educational. You are reviewing a pull request from a junior engineer, so your main goal is to help them learn and improve.
+Feel free to nitpick things like syntax, naming, structure, and best practices. Be thorough and constructive. The goal is to improve the code being written.
 
 ### Required Output Format:
 Provide your review in Markdown. Adhere strictly to this structure:

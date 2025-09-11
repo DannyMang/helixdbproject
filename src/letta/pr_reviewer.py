@@ -1,5 +1,4 @@
 from typing import List
-from dotenv import load_dotenv
 from letta_client import Letta
 import requests
 from utils.constants import LETTA_API_KEY, AGENT_ID
@@ -7,12 +6,12 @@ from utils.constants import LETTA_API_KEY, AGENT_ID
 from github_client import get_installation_access_token
 from .prompts import build_review_prompt, build_pr_comment_prompt
 from .memory_manager import MemoryManager
+from neon.db import NeonDB
 
-
-
-# Use default project instead of "Toph" to avoid project not found error
 client = Letta(token=LETTA_API_KEY)
 memory_manager = MemoryManager(client, AGENT_ID)
+
+db = NeonDB()
 
 def get_user_memory_blocks(user_id: str):
     memory_blocks = []
@@ -27,6 +26,7 @@ async def handle_pull_request_event(payload: dict):
     action = payload.get("action", "")
     if action in ["opened", "synchronize", "reopened"]:
         print(f"Handling pull_request.{action} event.")
+
         repo = payload.get("repository", {})
         pr_title = payload.get("pull_request", {}).get("title")
         pr_number = payload.get("pull_request", {}).get("number")
@@ -38,11 +38,14 @@ async def handle_pull_request_event(payload: dict):
         num_changed_files = payload.get("pull_request", {}).get("changed_files")
         owner, repo_name = repo['full_name'].split('/')
 
+        activated = db.get_repo_activated(repo['full-name']) or db.get_user_activated(owner)
+        if not activated:
+            return
 
         # Use review prompt for full PR reviews (not comments)
         changed_files = fetch_pr_changed_files(owner, repo_name, pr_number, app_token)
         prompt = build_review_prompt(repo.get("full_name", ""), pr_title, pr_author, head_branch, base_branch, changed_files)
-        response = await handle_pr_event(payload, prompt) # Your existing detailed handler
+        response = await generate_ai_response(payload, prompt) # Your existing detailed handler
         if response:
             post_pr_comment(owner, repo_name, pr_number, response, app_token)
         else:
@@ -56,6 +59,12 @@ async def handle_pr_comment_event(payload: dict):
     action = payload.get("action", "")
     comment_body = payload.get("comment", {}).get("body", "")
     commenter = payload.get("comment", {}).get("user", {}).get("login", "user")
+    repo = payload.get("repository", {})
+    owner = repo['full_name'].split('/')[0]
+
+    activated = db.get_repo_activated(repo['full_name']) or db.get_user_activated(owner)
+    if not activated:
+        return
 
     if action == "created":
         # Detect command in comment
@@ -73,7 +82,7 @@ async def handle_push_event(payload: dict):
     else:
         print(f"Ignored push to ref: {ref}")
 
-async def handle_pr_event(payload, prompt):
+async def generate_ai_response(payload, prompt):
     """Handle PR opened/updated events from webhooks or the App"""
     pr = payload.get("pull_request")
     if not pr:
@@ -114,21 +123,18 @@ async def handle_pr_event(payload, prompt):
     files = fetch_pr_changed_files(owner, repo_name, pr_number, app_token)
 
     if not files:
-        print("   No changed files found or GitHub API access not configured")
+        print("No changed files found or GitHub API access not configured")
         return
 
     # Call Cerebras to get review text
     review_text = call_letta_agent_for_review(prompt, owner)
 
     if not review_text:
-        print("   LLM review skipped (missing credentials or request failed)")
+        print("LLM review skipped (missing credentials or request failed)")
         return
     return review_text
 
 def call_letta_agent_for_review(prompt: str, user_id: str) -> str:
-    """Call Cerebras chat completions and return combined text."""
-    if not
-
     system_prompt = (
         "You are an expert software reviewer. Be precise, pragmatic, and actionable. "
         "Prefer specific code suggestions over generalities."
@@ -206,8 +212,6 @@ def truncate_text(text: str, max_chars: int) -> str:
     return text[: max_chars - 20] + "\n[...truncated...]\n"
 
 
-
-
 async def handle_installation_event(payload):
     """Handle installation events for the GitHub App"""
     action = payload.get("action")
@@ -265,7 +269,7 @@ async def command_router(payload, command):
                 if not user_query:
                     user_query = "Please provide information about this PR."
 
-                # Fetch the full PR object so handle_pr_event has the 'pull_request' key it needs
+                # Fetch the full PR object so generate_ai_response has the 'pull_request' key it needs
                 headers = {
                     "Authorization": f"Bearer {app_token}",
                     "Accept": "application/vnd.github+json",
@@ -302,7 +306,7 @@ async def command_router(payload, command):
 
                 repo_full_name = repository.get("full_name", "")
                 prompt = build_pr_comment_prompt(repo_full_name, pr_title, pr_author, head_branch, base_branch, changed_files, user_query)
-                response = await handle_pr_event(pr_payload, prompt)
+                response = await generate_ai_response(pr_payload, prompt)
 
     issue_number = payload.get("issue", {}).get("number")
     if issue_number and response is not None:
@@ -316,7 +320,7 @@ async def command_router(payload, command):
 
 EVENT_HANDLERS = {
     "pull_request": handle_pull_request_event,
-    # "pull_request_review_comment": handle_pr_comment_event,
+    # PRS are treated as issues under the hood, so issue_comment handles our 'pr comments' case
     "issue_comment": handle_pr_comment_event,
     "push": handle_push_event,
     "installation": handle_installation_event,
