@@ -1,3 +1,10 @@
+# Install CPU-only PyTorch first to avoid CUDA dependencies
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu
+torchaudio==2.5.1+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Main dependencies
 fastapi
 uvicorn
 requests
@@ -6,7 +13,7 @@ cerebras-cloud-sdk
 python-dotenv
 PyJWT==2.8.0
 PyGithub==1.59
-helix-py
 letta-client
 fastmcp
-psycopg2
+psycopg2-binary
+pyyaml

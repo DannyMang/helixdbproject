@@ -135,9 +135,6 @@ async def generate_ai_response(payload, prompt):
     return review_text
 
 def call_letta_agent_for_review(prompt: str, user_id: str) -> str:
-    """Call Cerebras chat completions and return combined text."""
-    if not
-
     system_prompt = (
         "You are an expert software reviewer. Be precise, pragmatic, and actionable. "
         "Prefer specific code suggestions over generalities."
